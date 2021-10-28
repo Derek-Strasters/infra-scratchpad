@@ -163,37 +163,41 @@ class Bits(MutableSequence[ValidBits]):
             raise ValueError("a positive length must be specified with an integer")
         if int_:
             self.extend(int(int_), int(length))
-            return
-        if bin_:
+        elif bin_:
             clean_bin = bin_.replace("0b", "").replace("_", "")
             for num in clean_bin.split(" "):
                 self.extend(num, len(num))
-            return
-        if hex_:
+        elif hex_:
             clean_hex = hex_.replace("0x", "").replace("_", "")
             for num in clean_hex.split():
                 self.extend(int(num, 16), len(num) * 4)
-            return
-        if bytes_:
+        elif bytes_:
             self._bytes = bytearray(bytes_)
             self._len = len(self._bytes)
-
         # TODO: INCOMPLETE
 
     def __repr__(self):
+        """
+        TODO: DOCS
+        :return:
+        """
         if len(self) <= 64:
             return f'Bits(bin_="{format(int(self), f"#0{self._len + 2}b")}")'
+
         if self._decimal_digits() <= 64:
             return f'Bits(int_="{format(int(self), f"0{self._decimal_digits()}d")}", length={self._len})'
+
         if len(self) // 8 <= 64:
             return f'Bits(hex_="{format(int(self), f"#0{len(self) // 8 + 2}x")}")'
-        return f'Bits(bin_="{self[:24].bin} ... {self[-(self._len_last_byte + 16):].bin}")'
+        if self._len_last_byte:
+            return f'Bits(bin_="{self[:24].bin} ... {self[-(self._len_last_byte + 16):].bin}")'
+        return f'Bits(bin_="{self[:24].bin} ... {self[-24:].bin}")'
 
     def _decimal_digits(self):
         """
         The minimum decimal digits it would take to represent the same amount of information.
-
-        :return: TODO: DOCS
+        TODO: DOCS
+        :return:
         """
         largest_possible = (1 << self._len) - 1
         return int(log(largest_possible, 10)) + 1
@@ -203,32 +207,47 @@ class Bits(MutableSequence[ValidBits]):
         pass
 
     def __bytes__(self) -> Iterable[int]:
-        return bytes(self.byte_generator())
+        return bytes(self.byte_gen())
 
-    def byte_generator(self) -> Iterable[int]:
+    def byte_gen(self, index: int = 0) -> Iterable[int]:
         """
         TODO: DOCS
 
         :return:
         """
-        for byte in self._bytes:
-            yield byte
+        for i in range(index, len(self._bytes)):
+            yield self._bytes[i]
         if self._len_last_byte:
             yield self._last_byte << 8 - self._len_last_byte
+
+    def _byte_and_len_gen(self, index: int = 0) -> Iterable[Tuple[int, int]]:
+        """
+        TODO: DOCS
+        yields bytes with length
+
+        :return:
+        """
+        for i in range(index, len(self._bytes)):
+            yield self._bytes[i], 8
+        if self._len_last_byte:
+            yield self._last_byte << 8 - self._len_last_byte, self._len_last_byte
 
     def __bool__(self):
         return bool(self._bytes) or bool(self._last_byte)
 
-    def _byte_bit_indicies(self, index: int, insert: bool = False) -> Tuple[int, int, int]:
-        if len(self) <= index or index < -len(self) - int(insert):
+    def _byte_bit_indicies(self, index: int) -> Tuple[int, int, int]:
+        """
+        TODO: DOCS
+
+        :param index:
+        :return:
+        """
+        if len(self) <= index or index < -len(self):
             raise IndexError
 
         # Modulo corrects negative indices
         if index < 0:
-            if insert and index == -(len(self) + 1):
-                index = 0
-            else:
-                index = index % len(self)
+            index = index % len(self)
 
         # The first is the index of the byte that the index is within.
         # The second is the index of the bit within the byte (counting from the left).
@@ -236,6 +255,12 @@ class Bits(MutableSequence[ValidBits]):
 
     @staticmethod
     def _validate_bit(value: ValidBits):
+        """
+        TODO: DOCS
+
+        :param value:
+        :return:
+        """
         zeros = {0, "0", False}
         ones = {1, "1", True}
 
@@ -250,43 +275,54 @@ class Bits(MutableSequence[ValidBits]):
     # Mutable Sequence Methods
 
     def insert(self, index: int, value: ValidBits) -> None:
+        """
+        TODO: DOCS
+
+        :param index:
+        :param value:
+        :return:
+        """
         value = self._validate_bit(value)
-        byte_index, bit_index, index = self._byte_bit_indicies(index)
+        # If the index is above the length, set it to the length.
+        # If the index is below the negative length, set it to the negative length.
+        # Then if the new index is negative, take the modulo so that -1 accesses the last element.
+        if len(self) == 0:
+            index = 0
+        else:
+            index = min(len(self), index) if index >= 0 else max(-len(self), index) % len(self)
+        byte_index, bit_index = index // 8, index % 8
 
         # If appending to the end.
         if index == len(self):
             self.append_bit(value)
-            return
 
         # If only modifying the last (incomplete) byte.
-        if byte_index == len(self._bytes):
+        elif byte_index == len(self._bytes):
             self._last_byte = self._insert_bit_in_byte(self._last_byte, self._len_last_byte, bit_index, value)
             self._increment_last_byte()
-            return
 
         # Inserting anywhere else.
-
-        # Insert the bit then remove the rightmost bit to carry over into the next byte to the right.
-        new_byte = self._insert_bit_in_byte(self._bytes[byte_index], 8, bit_index, value)
-        carry = new_byte & 1
-        new_byte >>= 1
-        # Append the byte with the carry over bit removed.
-        self._bytes[byte_index] = new_byte
-        # Repeat for the remaining whole bytes to the right of the index.
-        for i in range(byte_index + 1, len(self._bytes)):
-            new_byte = (carry << 8) | self._bytes[i]
+        else:
+            # Insert the bit then remove the rightmost bit to carry over into the next byte to the right.
+            new_byte = self._insert_bit_in_byte(self._bytes[byte_index], 8, bit_index, value)
             carry = new_byte & 1
             new_byte >>= 1
-            self._bytes[i] = new_byte
-        # Append the last carry bit to the last (incomplete) byte, and increment it's length.
-        self._last_byte = (carry << self._len_last_byte) | self._last_byte
-        self._increment_last_byte()
-        return
+            # Append the byte with the carry over bit removed.
+            self._bytes[byte_index] = new_byte
+            # Repeat for the remaining whole bytes to the right of the index.
+            for i in range(byte_index + 1, len(self._bytes)):
+                new_byte = (carry << 8) | self._bytes[i]
+                carry = new_byte & 1
+                new_byte >>= 1
+                self._bytes[i] = new_byte
+            # Append the last carry bit to the last (incomplete) byte, and increment it's length.
+            self._last_byte = (carry << self._len_last_byte) | self._last_byte
+            self._increment_last_byte()
 
     def extend(self, values: Union[Iterable[ValidBits], int], length: int = None) -> None:
         """
         TODO: DOCS
-        This is to allow adding integers with a length.
+        This is to allow extending by and integer given a bit length.
 
         :param values:
         :param length:
@@ -297,8 +333,9 @@ class Bits(MutableSequence[ValidBits]):
                 raise ValueError("length (bit length) greater than 0 must be provided for int values")
             for i in range(length - 1, -1, -1):
                 self.append(bool((1 << i) & values))
-            return
-        return super().extend(values)
+
+        else:
+            super().extend(values)
 
     @staticmethod
     def _insert_bit_in_byte(byte: int, length: int, index: int, value: bool) -> int:
@@ -379,10 +416,11 @@ class Bits(MutableSequence[ValidBits]):
             # If the case is simple.
             if step == 1 and start == 0:
                 byte_index, bit_index, index = self._byte_bit_indicies(stop)
-                bits = type(self)(bytes_=self._bytes[:stop])
+                bits = type(self)(bytes_=self._bytes[:byte_index])
                 # Append remaining bits.
-                for i in range(byte_index, byte_index + bit_index, 1):
+                for i in range(byte_index, byte_index + bit_index):
                     bits.append_bit(self.get_bit(i))
+                return bits
 
             # For all other cases (not particularly efficient).
             bits = type(self)()
@@ -448,7 +486,8 @@ class Bits(MutableSequence[ValidBits]):
                 self.set_bit(i, next(other_bit))
 
         # For the singular case
-        self.set_bit(index, other)
+        else:
+            self.set_bit(index, other)
 
     def set_bit(self, index: int, value: ValidBits) -> None:
         """
@@ -466,7 +505,8 @@ class Bits(MutableSequence[ValidBits]):
             self._last_byte = self._set_bit_in_byte(self._last_byte, self._len_last_byte, bit_index, value)
 
         # If the index is anywhere else.
-        self._bytes[byte_index] = self._set_bit_in_byte(self._bytes[byte_index], 8, bit_index, value)
+        else:
+            self._bytes[byte_index] = self._set_bit_in_byte(self._bytes[byte_index], 8, bit_index, value)
 
     @classmethod
     def _set_bit_in_byte(cls, byte: int, length: int, index: int, value: bool) -> int:
@@ -478,8 +518,11 @@ class Bits(MutableSequence[ValidBits]):
         :param length:
         :return:
         """
+        # Setting a bit in the last (incomplete) byte
         if cls._get_bit_from_byte(byte, length, index) == value:
             return byte
+
+        # All other cases
         right_index = length - index - 1
         return (1 << right_index) ^ byte
 
@@ -502,17 +545,58 @@ class Bits(MutableSequence[ValidBits]):
         """
         if isinstance(index, slice):
             start, stop, step = index.indices(len(self))
-            # FIXME: THIS IS BROKEN!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            return
-        self.del_bit(index)
+
+            # ***VERY inefficient***
+            # Always go in reverse order to not mess up the indexing.
+            removal_indices = sorted(list(range(start, stop, step)), reverse=True)
+            for i in removal_indices:
+                self.del_bit(i)
+
+        else:
+            self.del_bit(index)
 
     def del_bit(self, index: int) -> None:
+        """
+        TODO: DOCS
+
+        :param index:
+        :return:
+        """
         byte_index, bit_index, index = self._byte_bit_indicies(index)
 
-        # If only deleting from the last (incomplete) byte.
+        # The case of deleting a bit from the last (incomplete) byte.
         if byte_index == len(self._bytes):
-            pass
-        # FIXME: THIS IS BROKEN!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            self._last_byte = self._del_bit_from_byte(self._last_byte, self._len_last_byte, bit_index)
+            # We know there was at least one bit in the last (incomplete) byte
+            # because for a single byte with no last byte the max index is 7 and 7 // 8 = 0 (byte_index)
+            # so this logic could not be reached.
+            self._decrement_last_byte()
+
+        # All other cases.
+        else:
+            # Remove the bit from the target byte, then append the first bit from the next byte.
+            # Cascade the change through the list of bytes.
+            new_byte = self._del_bit_from_byte(self._bytes[byte_index], 8, bit_index)
+            for i in range(byte_index + 1, len(self._bytes)):
+                first_bit = bool(self._bytes[i] & 0b1000_0000)
+                self._bytes[i - 1] = (new_byte << 1) | first_bit
+                new_byte = self._bytes[i] & 0b0111_1111
+
+            # Append the first bit from the last (incomplete) byte.
+            if self._len_last_byte:
+                first_bit = bool(self._last_byte & (1 << self._len_last_byte - 1))
+                self._bytes[-1] = (new_byte << 1) | first_bit
+                # Truncate the first bit of the last (incomplete) byte.
+                self._last_byte = self._last_byte & ((1 << self._len_last_byte - 1) - 1)
+
+            # If the last (incomplete) byte is empty, remove the last full byte.
+            else:
+                self._bytes.pop()
+                # The former last full byte becomes the last (incomplete) byte with it's first bit was removed.
+                self._last_byte = new_byte
+
+            # Decrement the length and last (incomplete) byte length in both cases.
+            self._decrement_last_byte()
 
     @staticmethod
     def _del_bit_from_byte(byte: int, length: int, index: int) -> int:
@@ -522,12 +606,11 @@ class Bits(MutableSequence[ValidBits]):
         :param byte:
         :param length:
         :param index:
-        :param value:
         :return:
         """
         right_index = length - index
         left_bits = (byte >> right_index) << right_index - 1
-        right_bits = byte & ((1 << right_index) - 1)
+        right_bits = byte & ((1 << right_index - 1) - 1)
         return left_bits | right_bits
 
     def _decrement_last_byte(self) -> None:
@@ -554,11 +637,10 @@ class Bits(MutableSequence[ValidBits]):
         """
         self._len_last_byte -= 1
         self._len -= 1
-        # FIXME: THIS IS BROKEN!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        if self._len_last_byte == 0:
-            self._bytes.append(self._last_byte)
-            self._last_byte = 0
-            self._len_last_byte = 0
+        if self._len_last_byte < 0:
+            # self._last_byte = self._bytes.pop()
+            # self._last_byte >>= 1
+            self._len_last_byte = 7
 
     def __len__(self) -> int:
         return self._len
@@ -688,6 +770,12 @@ class Bits(MutableSequence[ValidBits]):
         # TODO: STUB
         pass
         # return self.__data
+
+    @property
+    def last_byte(self):
+        if self._len_last_byte <= 4:
+            return format(self._last_byte, f"#0{2 + self._len_last_byte}b")
+        return format(self._last_byte, f"#0{3 + self._len_last_byte}_b")
 
     @property
     def hex(self) -> str:
