@@ -149,7 +149,7 @@ class Bits(MutableSequence[ValidBits]):
         int_: SupportsInt = None,
         bin_: str = None,
         hex_: str = None,
-        bool_: bool = None,
+        bool_: Iterable[ValidBits] = None,
         bytes_: ByteString = None,
         # TODO: add IOStream like objects?
     ):
@@ -175,6 +175,9 @@ class Bits(MutableSequence[ValidBits]):
             self._bytes = bytearray(bytes_)
             self._len = len(self._bytes)
         # TODO: INCOMPLETE
+
+    def copy(self):
+        return type(self)(int_=int(self), length=self._len)
 
     def __repr__(self):
         """
@@ -413,7 +416,7 @@ class Bits(MutableSequence[ValidBits]):
         if isinstance(index, slice):
             start, stop, step = index.indices(len(self))
 
-            # If the case is simple.
+            # For the case where the slice starts from the same origin.
             if step == 1 and start == 0:
                 byte_index, bit_index, index = self._byte_bit_indicies(stop)
                 bits = type(self)(bytes_=self._bytes[:byte_index])
@@ -648,41 +651,62 @@ class Bits(MutableSequence[ValidBits]):
     # END Mutable Sequence Methods
 
     def __lt__(self, other: SupportsInt) -> bool:
-        # TODO: STUB
-        pass
+        """
+        TODO: DOCS
+        :param other:
+        :return:
+        """
+        return int(self) < int(other)
 
     def __le__(self, other: SupportsInt) -> bool:
-        # TODO: STUB
-        pass
+        """
+        TODO: DOCS
+        :param other:
+        :return:
+        """
+        return int(self) <= int(other)
 
     def __eq__(self, other: SupportsInt) -> bool:
-        # TODO: STUB
-        pass
+        """
+        TODO: DOCS
+        :param other:
+        :return:
+        """
+        return int(self) == int(other)
 
     def __ne__(self, other: SupportsInt) -> bool:
-        # TODO: STUB
-        pass
+        """
+        TODO: DOCS
+        :param other:
+        :return:
+        """
+        return int(self) != int(other)
 
     def __gt__(self, other: SupportsInt) -> bool:
-        # TODO: STUB
-        pass
+        """
+        TODO: DOCS
+        :param other:
+        :return:
+        """
+        return int(self) > int(other)
 
     def __ge__(self, other: SupportsInt) -> bool:
-        # TODO: STUB
-        pass
+        """
+        TODO: DOCS
+        :param other:
+        :return:
+        """
+        return int(self) >= int(other)
 
     def __add__(self, other: Union[Iterable[ValidBits], int]) -> "Bits":
         """
         This is NOT addition, this is concatenation.
+        TODO: DOCS
 
         :param other: Other object to be concatenated.
         :return: New Bits object that is a concatenation of the inputs.
         """
-        # TODO: STUB
-        pass
-        # if isinstance(other, Bits):
-        #     return type(self)((self.__data << other.__len) | other.__data, length=self.__len + other.__len)
-        # return NotImplemented
+        return self.
 
     def __lshift__(self, other: int) -> MutableSequence[ValidBits]:
         # TODO: STUB
