@@ -1,7 +1,6 @@
 """Utility functions."""
 from abc import abstractmethod
 from collections.abc import MutableSequence
-from copy import deepcopy
 from typing import (
     ByteString,
     Iterable,
@@ -21,7 +20,7 @@ T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)
 CS = TypeVar("CS", bound="ConcatenableSequence")
 ValidBit = Union[bool, Literal[1], Literal[0], Literal["1"], Literal["0"]]
-ValidBits = Union[Iterable[ValidBit], SupportsInt, str, ByteString]
+ValidBits = Union[Iterable[ValidBit], Tuple[int, int]]
 
 
 class ConcatenableSequence(Protocol[T_co]):
@@ -119,7 +118,7 @@ class Bits(MutableSequence[ValidBit]):
 
     def __init__(
         self,
-        bits: ValidBits = None,
+        bit_values: Union[Iterable[ValidBit], SupportsInt, str, ByteString] = None,
         bit_length: int = None,
     ):
         self._bytes = bytearray()
@@ -127,11 +126,22 @@ class Bits(MutableSequence[ValidBit]):
         self._last_byte = 0
         self._len = 0
 
-        if bits is not None:
-            self.extend(bits, bit_length)
+        if bit_values is not None:
+            if isinstance(bit_values, type(self)):
+                self._bytes = bit_values._bytes.copy()
+                self._len = bit_values._len
+                self._last_byte = bit_values._last_byte
+                self._len_last_byte = bit_values._len_last_byte
+            else:
+                self.extend(bit_values, bit_length)
 
     def copy(self):
-        return deepcopy(self)
+        new = type(self)()
+        new._bytes = self._bytes.copy()
+        new._len = self._len
+        new._last_byte = self._last_byte
+        new._len_last_byte = self._len_last_byte
+        return new
 
     def _decimal_digits(self):
         """
@@ -269,6 +279,7 @@ class Bits(MutableSequence[ValidBit]):
         :param value: The bit to be inserted.
         """
         value = self._validate_bit(value)
+
         # If the index is above the length, set it to the length.
         # If the index is below the negative length, set it to the negative length.
         # Then if the new index is negative, take the modulo so that -1 accesses the last element.
@@ -527,7 +538,7 @@ class Bits(MutableSequence[ValidBit]):
         elif isinstance(index, slice):
             start, stop, step = index.indices(len(self))
 
-            # Cast other to a Bits object (this will clean any strings)
+            # Cast other to a Bits object
             if isinstance(other, int):
                 other_bit = iter(type(self)(other, stop - start))
             else:
@@ -698,7 +709,7 @@ class Bits(MutableSequence[ValidBit]):
     def __ge__(self, other: SupportsInt) -> bool:
         return int(self) >= int(other)
 
-    def __add__(self, other: Union[Iterable[ValidBit], Tuple[int, int]]) -> "Bits":
+    def __add__(self, other: ValidBits) -> "Bits":
         """
         This is concatenation, NOT addition.
 
@@ -713,11 +724,7 @@ class Bits(MutableSequence[ValidBit]):
         :return: New Bits object that is a concatenation of the inputs.
         """
         new = self.copy()
-        if isinstance(other, tuple):
-            new.extend(*other)
-            return new
-
-        new.extend(other)
+        new.extend(*(other if isinstance(other, tuple) else (other,)))
         return new
 
     def __lshift__(self, index: int) -> "Bits":
@@ -748,7 +755,7 @@ class Bits(MutableSequence[ValidBit]):
         new.extend(self[:-index])
         return new
 
-    def __and__(self, other: Iterable[ValidBit]) -> "Bits":
+    def __and__(self, other: ValidBits) -> "Bits":
         """
         Bitwise and operation.
 
@@ -756,18 +763,20 @@ class Bits(MutableSequence[ValidBit]):
         '0b0001_1000'
         >>> (Bits('0111') & Bits('00011110')).bin
         '0b0001'
-        >>> (Bits("1110") & "0111").bin
+        >>> (Bits("1110") & "0b0111").bin
+        '0b0110'
+        >>> (Bits("1110") & (7, 4)).bin
         '0b0110'
 
         :param other: Other Bits to 'and' with
         :return: Combined Bits objects
         """
         new = type(self)()
-        for self_bit, other_bit in zip(self, other):
-            new.append(self_bit & self._validate_bit(other_bit))
+        for self_bit, other_bit in zip(self, Bits(*(other if isinstance(other, tuple) else (other,)))):
+            new.append(self_bit & other_bit)
         return new
 
-    def __xor__(self, other: Iterable[ValidBit]) -> "Bits":
+    def __xor__(self, other: ValidBits) -> "Bits":
         """
         Bitwise xor operation.
 
@@ -782,11 +791,11 @@ class Bits(MutableSequence[ValidBit]):
         :return: Combined Bits objects
         """
         new = type(self)()
-        for self_bit, other_bit in zip(self, other):
-            new.append(self_bit ^ self._validate_bit(other_bit))
+        for self_bit, other_bit in zip(self, Bits(*(other if isinstance(other, tuple) else (other,)))):
+            new.append(self_bit ^ other_bit)
         return new
 
-    def __or__(self, other: Iterable[ValidBit]) -> "Bits":
+    def __or__(self, other: ValidBits) -> "Bits":
         """
         Bitwise or operation.
 
@@ -801,11 +810,11 @@ class Bits(MutableSequence[ValidBit]):
         :return: Combined Bits objects
         """
         new = type(self)()
-        for self_bit, other_bit in zip(self, other):
-            new.append(self_bit | self._validate_bit(other_bit))
+        for self_bit, other_bit in zip(self, Bits(*(other if isinstance(other, tuple) else (other,)))):
+            new.append(self_bit | other_bit)
         return new
 
-    def __iadd__(self, other: Union[Iterable[ValidBit], Tuple[int, int]]) -> "Bits":
+    def __iadd__(self, other: ValidBits) -> "Bits":
         """
         Extend in-place.
 
@@ -856,7 +865,7 @@ class Bits(MutableSequence[ValidBit]):
             del self[-index:]
         return self
 
-    def __iand__(self, other: Iterable[ValidBit]) -> "Bits":
+    def __iand__(self, other: ValidBits) -> "Bits":
         """
         Bitwise 'and' with other bits; in-place.
 
@@ -869,13 +878,13 @@ class Bits(MutableSequence[ValidBit]):
         :return: The Bits object that was modified in place.
         """
         index = 0
-        for index, bits in enumerate(zip(self, other)):
-            self[index] = bits[0] & self._validate_bit(bits[1])
+        for index, bits in enumerate(zip(self, Bits(*(other if isinstance(other, tuple) else (other,))))):
+            self[index] = bits[0] & bits[1]
         if len(self) > index + 1:
             del self[-(index + 1) :]
         return self
 
-    def __ixor__(self, other: Iterable[ValidBit]) -> "Bits":
+    def __ixor__(self, other: ValidBits) -> "Bits":
         """
         Bitwise 'xor' with other bits; in-place.
 
@@ -888,13 +897,13 @@ class Bits(MutableSequence[ValidBit]):
         :return: The Bits object that was modified in place.
         """
         index = 0
-        for index, bits in enumerate(zip(self, other)):
-            self[index] = bits[0] ^ self._validate_bit(bits[1])
+        for index, bits in enumerate(zip(self, Bits(*(other if isinstance(other, tuple) else (other,))))):
+            self[index] = bits[0] ^ bits[1]
         if len(self) > index + 1:
             del self[-(index + 1) :]
         return self
 
-    def __ior__(self, other: Iterable[ValidBit]) -> "Bits":
+    def __ior__(self, other: ValidBits) -> "Bits":
         """
         Bitwise 'or' with other bits; in-place.
 
@@ -907,8 +916,8 @@ class Bits(MutableSequence[ValidBit]):
         :return: The Bits object that was modified in place.
         """
         index = 0
-        for index, bits in enumerate(zip(self, other)):
-            self[index] = bits[0] | self._validate_bit(bits[1])
+        for index, bits in enumerate(zip(self, Bits(*(other if isinstance(other, tuple) else (other,))))):
+            self[index] = bits[0] | bits[1]
         if len(self) > index + 1:
             del self[-(index + 1) :]
         return self
