@@ -50,7 +50,7 @@ def markers_to_bools(peg_str: str) -> Tuple[bool]:
     :return: List of booleans, true where each marker (M) was
 
     >>> markers_to_bools("PME")
-    [False, True, False]
+    (False, True, False)
     """
     return tuple(peg == "M" for peg in peg_str)
 
@@ -62,10 +62,10 @@ def pegs_to_bools(peg_str: str) -> Tuple[bool]:
     :param peg_str: String of peg symbols
     :return: List of booleans, true where each peg (P) was
 
-    >>> markers_to_bools("PME")
-    [True, False, False]
+    >>> pegs_to_bools("PME")
+    (True, True, False)
     """
-    return tuple(peg == "E" for peg in peg_str)
+    return tuple(peg != "E" for peg in peg_str)
 
 
 def invert_bools(bits: Iterable[bool]) -> Tuple[bool]:
@@ -89,10 +89,10 @@ def bools_to_nor_mask(masking_bools: Collection[bool]) -> NorMask:
     >>> b = [False, False, True, True]
     >>> nor_mask_false = bools_to_nor_mask([False, False, False, False])
     >>> nor_mask_false(a, b)
-    [False, True, False, True]
+    (False, True, False, True)
     >>> nor_mask_true = bools_to_nor_mask([True, True, True, True])
     >>> nor_mask_true(a, b)
-    [True, False, False, False]
+    (True, False, False, False)
     """
 
     def nor(a: bool, b: bool) -> bool:

@@ -18,7 +18,7 @@ from typing import (
 
 T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)
-CS = TypeVar("CS", bound="ConcatenableSequence")
+Rotatable = TypeVar("Rotatable", bound="ConcatenableSequence")
 ValidBit = Union[bool, Literal[1], Literal[0], Literal["1"], Literal["0"]]
 ValidBits = Union[Iterable[ValidBit], Tuple[int, int]]
 
@@ -27,15 +27,9 @@ class ConcatenableSequence(Protocol[T_co]):
     """
     Any Sequence T where +(:T, :T) -> T.
     Types must support indexing and concatenation.
-
-    >>> def test(a: CS, b: CS) -> CS: return a + b
-    >>> x = test('abc', 'def') # passes type check
-    >>> y = test(tuple(1, 2, 3), tuple(4, 5)) # passes type check
-    >>> z = test(list(1, 2), list(3, 4)) # passes type check
-
     """
 
-    def __add__(self, other: CS) -> CS:
+    def __add__(self, other: Rotatable) -> Rotatable:
         ...
 
     def __getitem__(self, index: int) -> T_co:
@@ -244,7 +238,7 @@ class Bits(MutableSequence[ValidBit]):
         >>> Bits._validate_bit("Puppy")
         Traceback (most recent call last):
          ...
-        TypeError: could not determine bit value for 'Puppy'
+        TypeError: could not determine single bit value for 'Puppy'
 
         :param value: The value to check.
         :return: The bool representation.
@@ -264,7 +258,7 @@ class Bits(MutableSequence[ValidBit]):
         >>> bits.insert(0, True)
         >>> bits.bin
         '0b1001'
-        >>> for _ in range(4)
+        >>> for _ in range(4):
         ...     bits.insert(len(bits), False)
         >>> bits.bin
         '0b1001_0000'
@@ -329,7 +323,7 @@ class Bits(MutableSequence[ValidBit]):
         >>> bits = Bits()
         >>> bits.extend('1010')
         >>> bits.bin
-        "0b1010"
+        '0b1010'
         >>> bits.extend(15, 4)
         >>> bits.bin
         '0b1010_1111'
@@ -405,7 +399,7 @@ class Bits(MutableSequence[ValidBit]):
         """
         Called when a bit has been added anywhere in the last (incomplete) byte.
 
-        >>> bits = Bits(int_=0b111_1111, bit_length=7)
+        >>> bits = Bits(0b111_1111, bit_length=7)
         >>> bits._len_last_byte
         7
         >>> bits.append(1)
@@ -438,7 +432,7 @@ class Bits(MutableSequence[ValidBit]):
 
         >>> Bits('0001 0000')[3]
         True
-        >>> Bits('0001 1000')[3:4]
+        >>> Bits('0001 1000')[3:5]
         Bits("0b11")
         >>> Bits("000011110011001101010101")[:-16]
         Bits("0b00001111")
@@ -519,6 +513,12 @@ class Bits(MutableSequence[ValidBit]):
         >>> bits[4:8] = 15
         >>> bits.bin
         '0b1111_1111 0b1111'
+        >>> bits[-4:] = '0000'
+        >>> bits.bin
+        '0b1111_1111 0b0000'
+        >>> bits[0] = False
+        >>> bits.bin
+        '0b0111_1111 0b0000'
 
         :param index: The index or slice to modify.
         :param other: The bit or bits to replace the old bit or bits.
@@ -589,19 +589,18 @@ class Bits(MutableSequence[ValidBit]):
         """
         Removes a bit or a slice.
 
-        >>> bits = Bits(bin_="1000 0000 0000 0100 0001")
+        >>> bits = Bits("1000 0000 0000 0100 0001")
         >>> del bits[13]
         >>> bits.bin
         '0b1000_0000 0b0000_0000 0b001'
-
-        >>> bits = Bits(bin_="1010 1010 1010 1010 0000")
+        >>> bits = Bits("1010 1010 1010 1010 0000")
         >>> del bits[1::2]
         >>> bits.bin
         '0b1111_1111 0b00'
         >>> del bits[8:10]
         >>> bits.bin
         '0b1111_1111'
-        >>> del bits[-4]
+        >>> del bits[-4:]
         >>> bits.bin
         '0b1111'
 
@@ -676,7 +675,7 @@ class Bits(MutableSequence[ValidBit]):
         """
         Called when a bit has been removed anywhere in the last (incomplete) byte.
 
-        >>> bits = Bits(int_=0b010001000, bit_length=9)
+        >>> bits = Bits(0b010001000, bit_length=9)
         >>> bits._len_last_byte
         1
         >>> del bits[0]
@@ -751,7 +750,7 @@ class Bits(MutableSequence[ValidBit]):
         :param index: Number of places to shift
         :return: Shifted Bits object
         """
-        new = type(self)(0, bit_length=index)
+        new = type(self)()
         new.extend(self[:-index])
         return new
 
@@ -781,9 +780,9 @@ class Bits(MutableSequence[ValidBit]):
         Bitwise xor operation.
 
         >>> (Bits('01111000') ^ Bits('00011110')).bin
-        '0b0110_0110
-        >>> (Bits('01111000') ^ Bits('00011110')).bin
-        '0b0110
+        '0b0110_0110'
+        >>> (Bits('01111000') ^ '0b00011110').bin
+        '0b0110_0110'
         >>> (Bits("1110") ^ "0111").bin
         '0b1001'
 
@@ -801,8 +800,6 @@ class Bits(MutableSequence[ValidBit]):
 
         >>> (Bits('01111000') | Bits('00011110')).bin
         '0b0111_1110'
-        >>> (Bits('01111000') | Bits('00011110')).bin
-        '0b0111'
         >>> (Bits("1100") | "0011").bin
         '0b1111'
 
@@ -823,6 +820,7 @@ class Bits(MutableSequence[ValidBit]):
         >>> bits.bin
         '0b1111_0000'
         >>> bits += 255, 8
+        >>> bits.bin
         '0b1111_0000 0b1111_1111'
 
         :param other: Bits to extend.
@@ -1004,10 +1002,8 @@ def reverse_byte(byte: int) -> int:
     """
     Reverse the bit order of an 8 bit integer.
 
-    >>> bin(203)
+    >>> bin(reverse_byte(0b00010111))
     '0b11101000'
-    >>> bin(reverse_byte(203))
-    '0b00010111'
     """
 
     # 0 1 2 3 4 5 6 7
@@ -1031,13 +1027,13 @@ def chunked(items: Sequence[T], n: int) -> Sequence[Sequence[T]]:
      >>> list(chunked([1, 2, 3, 4, 5], 2))
      [[1, 2], [3, 4], [5]]
      >>> list(chunked((1, 1, 1, 1, 1), 2))
-     ((1), (1), (1))
+     [(1, 1), (1, 1), (1,)]
     """
     # noinspection PyArgumentList
     return type(items)(type(items)(items[i : i + n]) for i in range(0, len(items), n))
 
 
-def rotate_left(sequence: CS, n: int) -> CS:
+def rotate_left(sequence: Rotatable, n: int) -> Rotatable:
     """
     Rotate a sequence to the left.
 
@@ -1051,7 +1047,7 @@ def rotate_left(sequence: CS, n: int) -> CS:
     return sequence[n:] + sequence[:n]
 
 
-def rotate_right(sequence: CS, n: int) -> CS:
+def rotate_right(sequence: Rotatable, n: int) -> Rotatable:
     """
     Rotate a sequence to the right.
 

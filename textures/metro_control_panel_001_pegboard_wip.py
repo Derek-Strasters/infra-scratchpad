@@ -1,7 +1,7 @@
 """A collection of stuff related to https://stalburg.net/Body_message#Pegs."""
 from typing import Sequence
 
-from infra.utils import chunks
+from infra.utils import chunked
 from textures.metro_control_panel_001_pegboard import (
     bools_to_int,
     bools_to_nor_mask,
@@ -32,7 +32,7 @@ if __name__ == "__main__":
     def bools_to_ascii_str(bits: Sequence[bool]) -> str:
         # assert len(bits) % 8 == 0
 
-        ints = (bools_to_int(byte) for byte in chunks(bits, 8))
+        ints = (bools_to_int(byte) for byte in chunked(bits, 8))
 
         return " ".join(f"{x:#04x}"[1:] if x in non_print_vals else f"  {color_red(chr(x))}" for x in ints)
 
