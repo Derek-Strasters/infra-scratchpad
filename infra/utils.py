@@ -216,10 +216,12 @@ class Bits(MutableSequence[ValidBit]):
             return f'Bits("{self[:24].hex()} ... {self[-(self.__len_last_byte + 16):].hex()}")'
         return f'Bits("{self[:24].hex()} ... {self[-24:].hex()}")'
 
-    def bytes_gen(self) -> Iterator[int]:
+    def bytes_gen(self, as_bytes=False) -> Iterator[Union[int, bytes]]:
         """
-        Generate bytes.
+        Generate bytes from the bits.
 
+        Yield an integer representation of each byte, uless `as_bytes` is set,
+        in which case return single `bytes` objects.
         An incomplete byte will be written from the left, for example:
         >>> for byte in Bits('10101010 1111').bytes_gen():
         ...     print(bin(byte))
@@ -228,9 +230,10 @@ class Bits(MutableSequence[ValidBit]):
 
         :return: The Iterator.
         """
-        yield from self.__bytes
+        yield from self.__bytes if not as_bytes else (byte.to_bytes(1, "big") for byte in self.__bytes)
         if self.__len_last_byte:
-            yield self.__last_byte << 8 - self.__len_last_byte
+            last_byte = self.__last_byte << 8 - self.__len_last_byte
+            yield last_byte if not as_bytes else last_byte.to_bytes(1, "big")
 
     def __bytes__(self) -> Iterable[int]:
         r"""
