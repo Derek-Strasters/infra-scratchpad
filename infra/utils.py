@@ -2,32 +2,34 @@
 import math
 from abc import abstractmethod
 from collections.abc import MutableSequence
+from copy import deepcopy
 from typing import (
+    Any,
     ByteString,
+    Container,
     Iterable,
+    Iterator,
     Literal,
     Protocol,
     Sequence,
+    SupportsInt,
     Tuple,
     TypeVar,
     Union,
     overload,
-    SupportsInt,
-    Any,
-    Iterator,
-    Container,
 )
 
 T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)
 Rotatable = TypeVar("Rotatable", bound="ConcatenableSequence")
 ValidBit = Union[bool, Literal[1], Literal[0], Literal["1"], Literal["0"]]
-ValidBits = Union[Iterable[ValidBit], Tuple[int, int]]
+ExtendableBits = Union[Iterable[ValidBit], Tuple[int, int]]
 
 
 class ConcatenableSequence(Protocol[T_co]):
     """
     Any Sequence T where +(:T, :T) -> T.
+
     Types must support indexing and concatenation.
 
     >>> def concat_from_index(sequence: ConcatenableSequence):
@@ -43,12 +45,15 @@ class ConcatenableSequence(Protocol[T_co]):
     """
 
     def __add__(self, other: Rotatable) -> Rotatable:
+        """Concatenate."""
         ...
 
     def __getitem__(self, index: int) -> T_co:
+        """Retrieve element."""
         ...
 
     def __len__(self) -> int:
+        """Length of collection."""
         ...
 
 
@@ -56,44 +61,48 @@ class ConcatenableSequence(Protocol[T_co]):
 # NOTE The proper bitwise operation for a NOR mask is (mask_ ^ left_) & (left_ | mask_) & ~(right & mask_).
 
 
+class SubscriptError(Exception):
+    """Raised when an object is accessed by a subscript of an unsupported type."""
+
+    def __init__(self, subbing_class: "Bits", subscript: Any, message="unsupported subscript"):
+        """Create the Exception and save the classes involved."""
+        self.class_name = type(subbing_class).__name__
+        self.subscript_class_name = type(subscript).__name__
+        self.message = message
+        super().__init__(self.message)
+
+    def __str__(self):
+        """Display error message."""
+        return f"{self.message}, '{self.class_name}' does not support '{self.subscript_class_name}' subscripts"
+
+
 class Bits(MutableSequence[ValidBit]):
     """
-    Stores bits like an array, and can be manipulated and iterated as such.
+    Stores bits in a list-like object, supports all bit-wise operators.
+
     Bits can be instantiated with:
-        * A string of binary e.g. "1010" or "0b1100_0010"
-        * A prefixed string of hexadecimal e.g. "0x1f 0xb2" or "0xbadc0de"
-        * A bytes-like object
-        * An integer-like object with a specified bit_length
-        * An Iterable containing any of: True, False, 0, 1, "0", "1"
+        * A string of binary e.g. "1010" or "0b1100_0010".
+        * A prefixed string of hexadecimal e.g. "0x1f 0xb2" or "0xbadc0de".
+        * A bytes-like object.
+        * An integer-like object with a specified bit_length.
+        * An Iterable containing any of: True, False, 0, 1, "0", "1".
+        * An Iterable of arbitrary objects specifed by 'ones' and 'zero' collections as arguments.
     The add (+) operator functions as concatination only, and supports all of
     the above schemes.  Addition may be done by first casting to int.
     Binary and hexadecimal representations may be accessed with the 'bin' and
     'hex' properties and the 'decode' method may be used to read the bits as
     bytes using a specified codec.
 
-    >>> Bits("10011001").hex()
-    '0x99'
-    >>> Bits("0xFF").bin()
-    '0b1111_1111'
-    >>> Bits("0xFF") + "0b1001_1001"
+    >>> Bits("0xFF") + "0b1001_1001" # Concatenation
     Bits("0b1111111110011001")
-    >>> Bits() + b"Hi"
-    Bits("0b0100100001101001")
-    >>> def double_gen(size: int):
-    ...     if size:
-    ...         yield size % 4 < 2
-    ...         yield from double_gen(size - 1)
-    >>> Bits(double_gen(16)) # Supports generators
-    Bits("0b1001100110011001")
-    >>> Bits("1111 0011 0000 1010")[0:8] # Slicing
+    >>> Bits("1111 0011 0000 1010")[:8] # Slicing
     Bits("0b11110011")
-    >>> Bits("0xAAAA")[:8:2]
+    >>> Bits("0xAAAA")[0:8:2] # Advanced slicing
     Bits("0b1111")
-    >>> Bits("1111") << 4 # Shift bits left
+    >>> Bits("1111") << 4 # Shift bits
     Bits("0b11110000")
 
     'nor' mask example:
-
     >>> mask_ = Bits('00001111')
     >>> left_ = Bits('01010101')
     >>> right = Bits('00110011')
@@ -102,7 +111,7 @@ class Bits(MutableSequence[ValidBit]):
 
     """
 
-    __slots__ = ["__bytes", "__last_byte", "__len_last_byte", "__len", "ONES", "ZEROS"]
+    __slots__ = ["__bytes", "__last_byte", "__len_last_byte", "__len"]  # pylint: disable=all (literally will crash)
 
     __bytes: bytearray
     __len: int
@@ -110,62 +119,87 @@ class Bits(MutableSequence[ValidBit]):
     __last_byte: int
     __len_last_byte: int
 
-    ZEROS: Container
-    ONES: Container
+    ONES = {1, "1", True}
+    ZEROS = {0, "0", False}
 
     def __init__(
         self,
         bit_values: Union[Iterable[ValidBit], SupportsInt, str, ByteString] = None,
         bit_length: int = None,
         /,
-        ones: set = None,
-        zeros: set = None,
+        ones: Container = None,
+        zeros: Container = None,
     ):
+        """
+        Create a new Bits object from an Iterable of bit like object.
+
+        Create from a string of binary: "1010", "0b1001", or "0b1001_1101"
+        Create from a string of hex: "0xFA 0xDE", "0XFFAA", "0Xab"
+        Create from bytes-like objects.
+        Create from Iterable of arbitrary objects by specifying containers
+        of objects for 'ones' and 'zeros'.
+
+        >>> Bits("10011001")
+        Bits("0b10011001")
+        >>> Bits("0xFF")
+        Bits("0b11111111")
+        >>> Bits("MPMPEEMP", ones="M", zeros="EP")
+        Bits("0b10100010")
+        >>> Bits() + b"Hi"
+        Bits("0b0100100001101001")
+        >>> def double_gen(size: int):
+        ...     if size:
+        ...         yield size % 4 < 2
+        ...         yield from double_gen(size - 1)
+        >>> Bits(double_gen(16)) # Supports generators
+        Bits("0b1001100110011001")
+
+        :param bit_values: Values to initialize with.
+        :param bit_length: Bit length, if initializing with an integer.
+        :param ones: Container of objects representing 1's.
+        :param zeros: Container of objects representing 0's.
+        """
         self.__bytes = bytearray()
         self.__len_last_byte = 0
         self.__last_byte = 0
         self.__len = 0
 
-        self.ZEROS = zeros or {0, "0", False}
-        self.ONES = ones or {1, "1", True}
-
         if bit_values is not None:
             if isinstance(bit_values, type(self)):
-                # Note Creating a Bits object from another,
-                self.__bytes = bit_values.__bytes
+                self.__bytes = bit_values.__bytes.copy()
                 self.__len = bit_values.__len
                 self.__last_byte = bit_values.__last_byte
                 self.__len_last_byte = bit_values.__len_last_byte
             else:
-                self.extend(bit_values, bit_length)
-
-    class SubscriptError(Exception):
-        """
-        Raised when an object is accessed by a subscript of an unsupported type.
-        """
-
-        def __init__(self, subbing_class: "Bits", subscript: Any, message="unsupported subscript"):
-            self.class_name = type(subbing_class).__name__
-            self.subscript_class_name = type(subscript).__name__
-            self.message = message
-            super().__init__(self.message)
-
-        def __str__(self):
-            return f"{self.message}, '{self.class_name}' does not support '{self.subscript_class_name}' subscripts"
+                if ones is not None or zeros is not None:
+                    self._custom_extend(bit_values, ones=ones, zeros=zeros)
+                else:
+                    self.extend(bit_values, bit_length)
 
     def copy(self):
-        new = type(self)()
+        """
+        Return a deep copy of the Bits object.
+
+        Does not copy 'ones' and 'zeros' collections.
+        >>> bits_1 = Bits('1111')
+        >>> bits_2 = bits_1.copy()
+        >>> bits_2 += '1111'
+        >>> bits_1.bin(True)
+        '1111'
+        """
+        new = Bits()
         new.__bytes = self.__bytes.copy()
         new.__len = self.__len
         new.__last_byte = self.__last_byte
         new.__len_last_byte = self.__len_last_byte
-        return new
+        return deepcopy(self)
 
     def __repr__(self):
         """
-        A quite representation of the Bits object.  The repr is equivalent to
-        code that would create an identical object, up to a size of 64 bytes;
-        after which it it abbreviated.
+        Represent the Bits object.
+
+        Equivalent to code which would create an identical object
+        but only up to a size of 64 bytes; after which it is abbreviated.
 
         :return: A string representation of the Bits object.
         """
@@ -184,9 +218,9 @@ class Bits(MutableSequence[ValidBit]):
 
     def bytes_gen(self) -> Iterator[int]:
         """
-        A generator for accessing the bytes.
-        An incomplete byte will be written from the left, for example:
+        Generate bytes.
 
+        An incomplete byte will be written from the left, for example:
         >>> for byte in Bits('10101010 1111').bytes_gen():
         ...     print(bin(byte))
         0b10101010
@@ -199,25 +233,35 @@ class Bits(MutableSequence[ValidBit]):
             yield self.__last_byte << 8 - self.__len_last_byte
 
     def __bytes__(self) -> Iterable[int]:
+        r"""
+        Return bytes object; an incomplete byte is written from the left.
+
+        For example:
+        >>> bytes(Bits('1111'))
+        b'\xf0'
+
+        """
         return bytes(self.bytes_gen())
 
     def decode(self, *args, **kwargs):
         """
-        A convenience wrapper for `bytes().decode()`
         Decode the bytes using the codec registered for encoding.
+
+        Wraps the `bytes.decode()` method.
+
+        :param args:
+        :param kwargs:
+        :return:
         """
         return bytes(self).decode(*args, **kwargs)
 
     def __bool__(self):
-        return bool(self.__bytes) or bool(self.__last_byte)
+        """Return true if not empty."""
+        return len(self.__bytes) > 0 or bool(self.__last_byte)
 
     def _byte_bit_indices(self, index: int) -> Tuple[int, int, int]:
         """
-        For a given index:
-            calculates the index of _bytes the index falls in (if applicable),
-            calculates the index of the bit it fall in within the byte (0-7),
-            clips the value of index to within -len(self) through len(self),
-        and returns these values in a tuple.
+        Calculate byte index, bit index (on the byte), and clip the original index.
 
         :param index: The index to calculate.
         :return: The tuple with computed index values.
@@ -233,9 +277,10 @@ class Bits(MutableSequence[ValidBit]):
         # The second is the index of the bit within the byte (counting from the left).
         return index // 8, index % 8, index
 
-    def _validate_bit(self, value: Union[str, int, bool]):
+    @classmethod
+    def _validate_bit(cls, value: Union[str, int, bool]):
         """
-        Validates a value as a ValidBit returns a bool representation.
+        Validate a value as a ValidBit, cast to bool.
 
         >>> Bits._validate_bit(0)
         False
@@ -253,9 +298,9 @@ class Bits(MutableSequence[ValidBit]):
         :param value: The value to check.
         :return: The bool representation.
         """
-        if value in self.ONES:
+        if value in cls.ONES:
             return True
-        if value in self.ZEROS:
+        if value in cls.ZEROS:
             return False
 
         raise TypeError(f"could not determine single bit value for {repr(value)}")
@@ -324,11 +369,28 @@ class Bits(MutableSequence[ValidBit]):
             self.__last_byte = (carry << self.__len_last_byte) | self.__last_byte
             self._increment_last_byte()
 
+    def _custom_extend(self, values: Iterable[Any], ones: Container = None, zeros: Container = None) -> None:
+        """
+        Extend by interpreting values if they are contained in custom ones and zeros containers.
+
+        >>> Bits("ffffabababffff", ones={"a"}, zeros={"b"})
+        Bits("0b101010")
+
+        :param values: The values to extend with.
+        :param zeros: Container of objects representing True.
+        :param ones: Container of objects representing False.
+        """
+        if values is self:
+            values = list(values)
+        for v in values:
+            if v in (ones or self.ONES):
+                self.append(True)
+            elif v in (zeros or self.ZEROS):
+                self.append(False)
+
     def extend(self, values: Union[Iterable[ValidBit], int], bit_length: int = None) -> None:
         """
-        Allows extending an integer for a given given a bit length.
-        Allows extending binary and hexadecimal strings with prefixes, spaces, and separators.
-        Allows extending bytes like objects.
+        Allow extending an integer (given a bit length), hex and bin strings, and bytes like objects.
 
         >>> bits = Bits()
         >>> bits.extend('1010')
@@ -407,7 +469,7 @@ class Bits(MutableSequence[ValidBit]):
 
     def _increment_last_byte(self) -> None:
         """
-        Called when a bit has been added anywhere in the last (incomplete) byte.
+        Call when a bit has been added anywhere in the last (incomplete) byte.
 
         >>> bits = Bits(0b111_1111, 7)
         >>> bits.last_byte_length
@@ -429,11 +491,13 @@ class Bits(MutableSequence[ValidBit]):
     @overload
     @abstractmethod
     def __getitem__(self, i: int) -> bool:
+        """Retrieve a bit."""
         ...
 
     @overload
     @abstractmethod
     def __getitem__(self, s: slice) -> "Bits":
+        """Retrieve a slice of bits."""
         ...
 
     def __getitem__(self, index):
@@ -486,7 +550,7 @@ class Bits(MutableSequence[ValidBit]):
                 new.append(self[i])
             return new
 
-        raise self.SubscriptError(self, index)
+        raise SubscriptError(self, index)
 
     @staticmethod
     def _get_bit_from_byte(byte: int, length: int, index: int) -> bool:
@@ -507,16 +571,18 @@ class Bits(MutableSequence[ValidBit]):
     @overload
     @abstractmethod
     def __setitem__(self, i: int, o: ValidBit) -> None:
+        """Set a bit."""
         ...
 
     @overload
     @abstractmethod
     def __setitem__(self, s: slice, o: Union[Iterable[ValidBit], str, ByteString]) -> None:
+        """Set a slice of bits."""
         ...
 
     def __setitem__(self, index, other):
         """
-        Sets a bit or slice of bits.
+        Set a bit or slice of bits.
 
         >>> bits = Bits('1111 1111 1111')
         >>> bits[4:8] = '0000'
@@ -564,7 +630,7 @@ class Bits(MutableSequence[ValidBit]):
                 pass
 
         else:
-            raise self.SubscriptError(self, index)
+            raise SubscriptError(self, index)
 
     @classmethod
     def _set_bit_in_byte(cls, byte: int, length: int, index: int, value: bool) -> int:
@@ -590,16 +656,18 @@ class Bits(MutableSequence[ValidBit]):
     @overload
     @abstractmethod
     def __delitem__(self, i: int) -> None:
+        """Remove a single bit."""
         ...
 
     @overload
     @abstractmethod
     def __delitem__(self, i: slice) -> None:
+        """Remove a slice."""
         ...
 
     def __delitem__(self, index):
         """
-        Removes a bit or a slice.
+        Remove a bit or a slice.
 
         >>> bits = Bits("1000 0000 0000 0100 0001")
         >>> del bits[13]
@@ -663,7 +731,7 @@ class Bits(MutableSequence[ValidBit]):
                 del self[i]
 
         else:
-            raise self.SubscriptError(self, index)
+            raise SubscriptError(self, index)
 
     @staticmethod
     def _del_bit_from_byte(byte: int, length: int, index: int) -> int:
@@ -685,7 +753,7 @@ class Bits(MutableSequence[ValidBit]):
 
     def _decrement_last_byte(self) -> None:
         """
-        Called when a bit has been removed anywhere in the last (incomplete) byte.
+        Call when a bit has been removed anywhere in the last (incomplete) byte.
 
         >>> bits = Bits(0b010001000, 9)
         >>> bits.last_byte_length
@@ -700,29 +768,36 @@ class Bits(MutableSequence[ValidBit]):
             self.__len_last_byte = 7
 
     def __len__(self) -> int:
+        """Total number of bits."""
         return self.__len
 
     def __lt__(self, other: SupportsInt) -> bool:
+        """Int value of bits is less than the int value of other."""
         return int(self) < int(other)
 
     def __le__(self, other: SupportsInt) -> bool:
+        """Int value of bits is less than or equal to the int value of other."""
         return int(self) <= int(other)
 
     def __eq__(self, other: SupportsInt) -> bool:
+        """Int value of bits is equal to the int value of other."""
         return int(self) == int(other)
 
     def __ne__(self, other: SupportsInt) -> bool:
+        """Int value of bits is not equal to the int value of other."""
         return int(self) != int(other)
 
     def __gt__(self, other: SupportsInt) -> bool:
+        """Int value of bits is greater than the int value of other."""
         return int(self) > int(other)
 
     def __ge__(self, other: SupportsInt) -> bool:
+        """Int value of bits is greater than or equal to the int value of other."""
         return int(self) >= int(other)
 
-    def __add__(self, other: ValidBits) -> "Bits":
+    def __add__(self, other: ExtendableBits) -> "Bits":
         """
-        This is concatenation, NOT addition.
+        Concatenation bits; NOT addition.
 
         >>> (Bits("0110") + Bits("1001")).bin()
         '0b0110_1001'
@@ -766,7 +841,7 @@ class Bits(MutableSequence[ValidBit]):
         new.extend(self[:-index])
         return new
 
-    def __and__(self, other: ValidBits) -> "Bits":
+    def __and__(self, other: ExtendableBits) -> "Bits":
         """
         Bitwise and operation.
 
@@ -787,7 +862,7 @@ class Bits(MutableSequence[ValidBit]):
             new.append(self_bit & other_bit)
         return new
 
-    def __xor__(self, other: ValidBits) -> "Bits":
+    def __xor__(self, other: ExtendableBits) -> "Bits":
         """
         Bitwise xor operation.
 
@@ -806,7 +881,7 @@ class Bits(MutableSequence[ValidBit]):
             new.append(self_bit ^ other_bit)
         return new
 
-    def __or__(self, other: ValidBits) -> "Bits":
+    def __or__(self, other: ExtendableBits) -> "Bits":
         """
         Bitwise or operation.
 
@@ -823,7 +898,7 @@ class Bits(MutableSequence[ValidBit]):
             new.append(self_bit | other_bit)
         return new
 
-    def __iadd__(self, other: ValidBits) -> "Bits":
+    def __iadd__(self, other: ExtendableBits) -> "Bits":
         """
         Extend in-place.
 
@@ -875,7 +950,7 @@ class Bits(MutableSequence[ValidBit]):
             del self[-index:]
         return self
 
-    def __iand__(self, other: ValidBits) -> "Bits":
+    def __iand__(self, other: ExtendableBits) -> "Bits":
         """
         Bitwise 'and' with other bits; in-place.
 
@@ -894,7 +969,7 @@ class Bits(MutableSequence[ValidBit]):
             del self[-(index + 1) :]
         return self
 
-    def __ixor__(self, other: ValidBits) -> "Bits":
+    def __ixor__(self, other: ExtendableBits) -> "Bits":
         """
         Bitwise 'xor' with other bits; in-place.
 
@@ -913,7 +988,7 @@ class Bits(MutableSequence[ValidBit]):
             del self[-(index + 1) :]
         return self
 
-    def __ior__(self, other: ValidBits) -> "Bits":
+    def __ior__(self, other: ExtendableBits) -> "Bits":
         """
         Bitwise 'or' with other bits; in-place.
 
@@ -965,9 +1040,9 @@ class Bits(MutableSequence[ValidBit]):
     @property
     def last_byte_length(self):
         """
-        When the total number of bits are not even multiple of 8, the remaining
-        bits are accounted for separately.  This property gives the length of
-        the last incomplete byte in the object.
+        If the totall number of bits is not divisible by 8, get the remainder.
+
+        This property gives the length of the last incomplete byte in the object.
 
         >>> bits = Bits("10011001 10011001 1010")
         >>> bits[-bits.last_byte_length:].bin(True)
@@ -979,11 +1054,10 @@ class Bits(MutableSequence[ValidBit]):
 
     def hex(self, compact: bool = False, prefix: str = "0x", sep: str = " ", fmt: str = None) -> str:
         r"""
-        Returns a string with hexadecimal representation of each byte.
-        NOTE: If desired the prefix can be set to the empty string and
-        enabled in the formatting argument.
-        Default formatting can be changed with the hex_formatting attribute
-        on the instance or class level.
+        Return a string with hexadecimal representation of each byte.
+
+        NOTE: The prefix argument can be set to the empty string and then
+        enabled in the formatting argument if that is preferred.
 
         >>> Bits("0b1111").hex()
         '0xF0'
@@ -1013,9 +1087,10 @@ class Bits(MutableSequence[ValidBit]):
 
     def bin(self, compact: bool = False, prefix: str = "0b", sep: str = " ", group: bool = True) -> str:
         """
-        Returns a string with the binary representations of each byte.
-        NOTE: If desired the prefix can be set to the empty string and
-        enabled in the formatting argument.
+        Return a string with the binary representations of each byte.
+
+        NOTE: The prefix argument can be set to the empty string and then
+        enabled in the formatting argument if that is preferred.
 
         >>> Bits(255, 8).bin()
         '0b1111_1111'
@@ -1039,7 +1114,7 @@ class Bits(MutableSequence[ValidBit]):
             if self.__len_last_byte:
                 ret_str += format(self.__last_byte, f"0{self.__len_last_byte}b")
         else:
-            ret_str = sep.join(prefix + format(byte, f"09_b" if group else "08b") for byte in self.__bytes)
+            ret_str = sep.join(prefix + format(byte, "09_b" if group else "08b") for byte in self.__bytes)
             if self.__len_last_byte:
                 ret_str += sep if ret_str else ""
                 if group:
@@ -1058,7 +1133,6 @@ def reverse_byte(byte: int) -> int:
     >>> bin(reverse_byte(0b00010111))
     '0b11101000'
     """
-
     # 0 1 2 3 4 5 6 7
     byte = (byte & 0b00001111) << 4 | (byte & 0b11110000) >> 4
     # 4 5 6 7 0 1 2 3
@@ -1072,6 +1146,7 @@ def reverse_byte(byte: int) -> int:
 def chunked(items: Sequence[T], n: int) -> Sequence[Sequence[T]]:
     """
     Yield successive n-sized chunks from lst.
+
     The last chunk is trunkated as needed.
 
     :param items: A collection of things to be chunked.

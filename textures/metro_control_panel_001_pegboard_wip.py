@@ -5,12 +5,12 @@ from termcolor import colored
 
 from infra.utils import chunked
 from textures.metro_control_panel_001_pegboard import (
+    PegGroup,
     bools_to_int_be,
     bools_to_nor_mask,
     invert_bools,
     matching_elements,
     metro_control_panel_001_pegboard,
-    PegGroup,
 )
 
 ColorFunc = Callable[[str], str]
