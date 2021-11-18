@@ -11,6 +11,8 @@ Pegs = Tuple[Tuple[str, str], ...]
 
 @dataclass
 class PegGroup:
+    """A grouping of binary representations of pegs and marker positions."""
+
     name: str
     pegs: Sequence[bool]
     markers: Sequence[bool]
@@ -40,7 +42,7 @@ def _remove_empty(pegs: Pegs) -> Pegs:
 
 
 def _swap_pegs(pegs: Pegs, a: str, b: str) -> Pegs:
-    """Trade places of two symbols"""
+    """Trade places of two symbols."""
     assert len(a) == 1 and len(b) == 1
 
     placeholder = "_"
@@ -52,8 +54,7 @@ def _swap_pegs(pegs: Pegs, a: str, b: str) -> Pegs:
 
 def matching_elements(sequence: Sequence[T], needle: T) -> Tuple[bool]:
     """
-    Returns a tuple of bools equal length to sequence with True values
-    at every index where needle is equal to the item.
+    Return a tuple with True values at each index where needle equals the element in sequence.
 
     :param sequence: The sequence to check for matches.
     :param needle: An object to check against the sequence.
@@ -66,14 +67,20 @@ def matching_elements(sequence: Sequence[T], needle: T) -> Tuple[bool]:
 
 
 def invert_bools(bits: Iterable[bool]) -> Tuple[bool]:
+    """
+    Invert each element in bits and return as a tuple.
+
+    :param bits: The bits to be inverted.
+    :return: The inverted tuple.
+    """
     return tuple(not bit for bit in bits)
 
 
 def bools_to_nor_mask(masking_bools: Collection[bool]) -> NorMask:
     """
-    Returns a sequence of binary functions. Depending on
-    masking_bools[i], each function returns either nor(a,b) if True, or left(a,b):=a otherwise.
+    Return a sequence of binary functions.
 
+    Depending on masking_bools[i], each function returns either nor(a,b) if True, or left(a,b):=a otherwise.
     E.g., bools_to_nor_mask((True, False)) returns (nor, left)
 
     :param masking_bools: Bools that determine if the function should NOR or not.
@@ -106,11 +113,10 @@ def bools_to_nor_mask(masking_bools: Collection[bool]) -> NorMask:
 
 def bools_to_int_be(bits: Collection) -> int:
     """
-    Integer from a sequence of boolean values.
-    Assumes the sequence is stored big endian style.
+    Integer from a sequence of boolean values; assumes the sequence is stored in big endian order.
 
-    :param bits: The sequence of booleans
-    :return: The integer
+    :param bits: The sequence of booleans.
+    :return: The integer.
 
     >>> bools_to_int_be([False, True, False, True])
     5

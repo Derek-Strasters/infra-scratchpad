@@ -8,11 +8,14 @@ authors = ["Your Name <you@example.com>"]
 python = "^3.8"
 termcolor = "*"
 
+
 [tool.poetry.dev-dependencies]
 black = "*"
 isort = "*"
 pydocstyle = "*"
 pytest = "*"
+pylint = "*"
+mypy = "*"
 
 flake8 = "*"
 flake8-black = "*"
@@ -38,3 +41,17 @@ addopts = "--doctest-modules"
 
 [tool.pydocstyle]
 match-dir = "(?!venv).*"
+
+[tool.pylint.messages_control]
+disable = "bad-continuation, bad-whitespace"
+
+[tool.pylint.format]
+max-line-length = "120"
+
+[tool.pylint.basic]
+good-names = "_,a,b,c,d,ex,i,j,k,n,m,T,T_co,T_contra,r,s,x,y,z"
+variable-rgx = "[a-z_][a-z0-9_]{1,30}$"
+function-rgx = "[a-z_][a-z0-9_]{,30}$"
+attr-rgx = "[a-z_][a-z0-9_]{1,}$"
+class-attribute-rgx = "([A-Za-z_][A-Za-z0-9_]{1,30}|(__.*__))$"
+argument-rgx = "[a-z_][a-z0-9_]{1,30}$"

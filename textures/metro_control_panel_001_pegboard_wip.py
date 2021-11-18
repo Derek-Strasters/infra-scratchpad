@@ -3,8 +3,8 @@ from typing import Callable, Sequence
 
 from termcolor import colored
 
-from infra.utils import chunked
-from textures.metro_control_panel_001_pegboard import (
+from ..infra.utils import chunked
+from ..textures.metro_control_panel_001_pegboard import (
     PegGroup,
     bools_to_int_be,
     bools_to_nor_mask,
@@ -19,6 +19,7 @@ ColorFunc = Callable[[str], str]
 def bools_to_ascii_str(bits: Sequence[bool], post_op: ColorFunc = lambda x: x) -> str:
     """
     Convert a sequence of bits (booleans) to one ascii character for each byte.
+
     Non printing characters are represented like "x1f".
     Each character or hex code will have a padded width of 3 characters, and
     a space will be inserted between consecutive characters.
@@ -32,7 +33,6 @@ def bools_to_ascii_str(bits: Sequence[bool], post_op: ColorFunc = lambda x: x) -
     >>> bools_to_ascii_str([False, False, False, False, True, False, True, False])
     'x0a'
     """
-
     ints = (bools_to_int_be(byte) for byte in chunked(bits, 8))
 
     return " ".join(f"{x:#04x}"[1:] if not chr(x).isalnum() else f"{post_op(chr(x))}  " for x in ints)
@@ -61,6 +61,7 @@ if __name__ == "__main__":
     zeros = [False] * 24
 
     def red_text(text: str):
+        """Color the given text red when printed."""
         return colored(text, "red")
 
     # Some labeling to help identify interesting results.
@@ -97,7 +98,9 @@ if __name__ == "__main__":
     # Reverse each peg group
     for i, peg_group in enumerate(peg_groups):
         peg_groups[i] = PegGroup(
-            name=peg_group.name, pegs=tuple(reversed(peg_group.pegs)), markers=tuple(reversed(peg_group.markers))
+            name=peg_group.name,
+            pegs=tuple(reversed(peg_group.pegs)),
+            markers=tuple(reversed(peg_group.markers)),
         )
 
     for i, pegs1 in enumerate(peg_groups):
