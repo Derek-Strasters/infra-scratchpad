@@ -22,8 +22,7 @@ class ConcatenableSequence(Protocol[T_co]):
     (1, 2, 3)
     >>> concat_from_index(["a", "b", "c"])
     ['a', 'b', 'c']
-    >>> from infra.bits import Bits
-    >>> concat_from_index(Bits('11011'))
+    >>> from biterator import Bits; concat_from_index(Bits('11011'))
     Bits("0b11011")
     """
 
@@ -57,7 +56,7 @@ def reverse_byte(byte: int) -> int:
     return byte
 
 
-def chunked(items: Sequence[T], n: int) -> Sequence[Sequence[T]]:
+def chunked(items: Sequence[T], n: int) -> Sequence[Tuple[T]]:
     """
     Yield successive n-sized chunks from lst.
 
@@ -67,12 +66,13 @@ def chunked(items: Sequence[T], n: int) -> Sequence[Sequence[T]]:
     :param n: The size of each chunk.
 
      >>> list(chunked([1, 2, 3, 4, 5], 2))
-     [[1, 2], [3, 4], [5]]
+     [(1, 2), (3, 4), (5,)]
      >>> list(chunked((1, 1, 1, 1, 1), 2))
      [(1, 1), (1, 1), (1,)]
     """
+    sequence_type = type(items)
     # noinspection PyArgumentList
-    return type(items)(type(items)(items[i : i + n]) for i in range(0, len(items), n))
+    return sequence_type((tuple(items[i : i + n]) for i in range(0, len(items), n)))
 
 
 def rotate_left(sequence: Rotatable, n: int) -> Rotatable:

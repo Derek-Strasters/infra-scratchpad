@@ -1,22 +1,21 @@
 """A collection of stuff related to https://stalburg.net/Body_message#Pegs."""
-from typing import Callable, Sequence
+from typing import Callable
 
+from biterator import Bits
 from termcolor import colored
 
-from ..infra.utils import chunked
-from ..textures.metro_control_panel_001_pegboard import (
+from textures.metro_control_panel_001_pegboard import (
     PegGroup,
-    bools_to_int_be,
-    bools_to_nor_mask,
-    invert_bools,
-    matching_elements,
     metro_control_panel_001_pegboard,
 )
 
 ColorFunc = Callable[[str], str]
 
 
-def bools_to_ascii_str(bits: Sequence[bool], post_op: ColorFunc = lambda x: x) -> str:
+# NOTE: iso8859_10 is for finland
+
+
+def bits_2_glyphs(bits: Bits, post_op: ColorFunc = lambda x: x) -> str:
     """
     Convert a sequence of bits (booleans) to one ascii character for each byte.
 
@@ -25,17 +24,15 @@ def bools_to_ascii_str(bits: Sequence[bool], post_op: ColorFunc = lambda x: x) -
     a space will be inserted between consecutive characters.
 
     :param bits: Sequence of booleans as bits to be decoded.
+    :param post_op: Optional function to applied to aplhanumerics.
     :return: String containing the decoded bits.
-    :param post_op: Optional function to be applied to.
 
-    >>> bools_to_ascii_str([False, True, True, False, False, True, False, True])
-    'e  '
-    >>> bools_to_ascii_str([False, False, False, False, True, False, True, False])
-    'x0a'
+    >>> bits_2_glyphs(Bits([False, True, True, False, False, True, False, True]))
+    '   e'
+    >>> bits_2_glyphs(Bits([False, False, False, False, True, False, True, False]))
+    '  0a'
     """
-    ints = (bools_to_int_be(byte) for byte in chunked(bits, 8))
-
-    return " ".join(f"{x:#04x}"[1:] if not chr(x).isalnum() else f"{post_op(chr(x))}  " for x in ints)
+    return " ".join(f"{ord(x):4x}" if not x.isalnum() else f"   {post_op(x)}" for x in bits.decode("iso8859_10"))
 
 
 if __name__ == "__main__":
@@ -51,8 +48,8 @@ if __name__ == "__main__":
     peg_groups = [
         PegGroup(
             name=peg_group_names[i][j],
-            pegs=invert_bools(matching_elements(peg_str, "E")),
-            markers=matching_elements(peg_str, "M"),
+            pegs=Bits(peg_str, ones={"P", "M"}),
+            markers=Bits(peg_str, ones={"M"}),
         )
         for i, panels in enumerate(metro_control_panel_001_pegboard)
         for j, peg_str in enumerate(panels)
@@ -66,63 +63,34 @@ if __name__ == "__main__":
 
     # Some labeling to help identify interesting results.
     print()
-    print(" " * 27 + (" " * 8).join(f"col {x: <2d}" for x in range(1, 9)))
+    print(" " * 28 + (" " * 11).join(f"col {x: <2d}" for x in range(1, 9)))
+
+    def nor_mask(a, b, mask):
+        """
+        Return a sequence of binary functions.
+
+        Depending on masking_bools[i], each function returns either nor(a,b) if True, or left(a,b):=a otherwise.
+        """
+        return (mask ^ a) & (mask | a) & ~(mask & b)
 
     # Iterate through all combinations of the peg groupings.
     # Bits are represented by peg locations.
     # A nor mask is made from the marker locations from one of the peg groupings.
     for i, pegs1 in enumerate(peg_groups):
-        mask_1 = bools_to_nor_mask(pegs1.markers)
-        inverted_1 = invert_bools(pegs1.pegs)
 
         for j, pegs2 in enumerate(peg_groups):
-            mask_2 = bools_to_nor_mask(pegs2.markers)
-            inverted_2 = invert_bools(pegs2.pegs)
-
             print(f"{pegs1.name} x {pegs2.name}", end=" =  ")
 
-            print(bools_to_ascii_str(mask_1(pegs1.pegs, pegs2.pegs), red_text), end="   ")  # col 1
-            print(bools_to_ascii_str(mask_2(pegs1.pegs, pegs2.pegs), red_text), end="   ")  # col 2
+            print(bits_2_glyphs(nor_mask(pegs1.pegs, pegs2.pegs, pegs1.markers), red_text), end="   ")  # col 1
+            print(bits_2_glyphs(nor_mask(pegs1.pegs, pegs2.pegs, pegs2.markers), red_text), end="   ")  # col 2
 
-            print(bools_to_ascii_str(mask_1(pegs1.pegs, inverted_2), red_text), end="   ")  # col 3
-            print(bools_to_ascii_str(mask_2(pegs1.pegs, inverted_2), red_text), end="   ")  # col 4
+            print(bits_2_glyphs(nor_mask(pegs1.pegs, ~pegs2.pegs, pegs1.markers), red_text), end="   ")  # col 3
+            print(bits_2_glyphs(nor_mask(pegs1.pegs, ~pegs2.pegs, pegs2.markers), red_text), end="   ")  # col 4
 
-            print(bools_to_ascii_str(mask_1(inverted_1, pegs2.pegs), red_text), end="   ")  # col 5
-            print(bools_to_ascii_str(mask_2(inverted_1, pegs2.pegs), red_text), end="   ")  # col 6
+            print(bits_2_glyphs(nor_mask(~pegs1.pegs, pegs2.pegs, pegs1.markers), red_text), end="   ")  # col 5
+            print(bits_2_glyphs(nor_mask(~pegs1.pegs, pegs2.pegs, pegs2.markers), red_text), end="   ")  # col 6
 
-            print(bools_to_ascii_str(mask_1(inverted_1, inverted_2), red_text), end="   ")  # col 7
-            print(bools_to_ascii_str(mask_2(inverted_1, inverted_2), red_text), end="   ")  # col 8
-            print()
-        print()
-
-    # Reverse each peg group
-    for i, peg_group in enumerate(peg_groups):
-        peg_groups[i] = PegGroup(
-            name=peg_group.name,
-            pegs=tuple(reversed(peg_group.pegs)),
-            markers=tuple(reversed(peg_group.markers)),
-        )
-
-    for i, pegs1 in enumerate(peg_groups):
-        mask_1 = bools_to_nor_mask(pegs1.markers)
-        inverted_1 = invert_bools(pegs1.pegs)
-
-        for j, pegs2 in enumerate(peg_groups):
-            mask_2 = bools_to_nor_mask(pegs2.markers)
-            inverted_2 = invert_bools(pegs2.pegs)
-
-            print(f"{pegs1.name} x {pegs2.name}", end=" =  ")
-
-            print(bools_to_ascii_str(mask_1(pegs1.pegs, pegs2.pegs), red_text), end="   ")  # col 1
-            print(bools_to_ascii_str(mask_2(pegs1.pegs, pegs2.pegs), red_text), end="   ")  # col 2
-
-            print(bools_to_ascii_str(mask_1(pegs1.pegs, inverted_2), red_text), end="   ")  # col 3
-            print(bools_to_ascii_str(mask_2(pegs1.pegs, inverted_2), red_text), end="   ")  # col 4
-
-            print(bools_to_ascii_str(mask_1(inverted_1, pegs2.pegs), red_text), end="   ")  # col 5
-            print(bools_to_ascii_str(mask_2(inverted_1, pegs2.pegs), red_text), end="   ")  # col 6
-
-            print(bools_to_ascii_str(mask_1(inverted_1, inverted_2), red_text), end="   ")  # col 7
-            print(bools_to_ascii_str(mask_2(inverted_1, inverted_2), red_text), end="   ")  # col 8
+            print(bits_2_glyphs(nor_mask(~pegs1.pegs, ~pegs2.pegs, pegs1.markers), red_text), end="   ")  # col 7
+            print(bits_2_glyphs(nor_mask(~pegs1.pegs, ~pegs2.pegs, pegs2.markers), red_text), end="   ")  # col 8
             print()
         print()

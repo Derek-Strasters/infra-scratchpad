@@ -4,6 +4,7 @@ inline-quotes = double
 multiline-quotes = double
 no-accept-encodings = True
 import-order-style = pycharm
+application-import-names = audio, infra, other, textures
 exclude =
     venv,
 max-line-length = 120

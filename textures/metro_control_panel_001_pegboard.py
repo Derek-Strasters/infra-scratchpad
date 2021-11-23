@@ -1,7 +1,8 @@
 """A collection of stuff related to https://stalburg.net/Body_message#Pegs."""
 from dataclasses import dataclass
-from functools import reduce
-from typing import Callable, Collection, Iterable, Sequence, Tuple, TypeVar
+from typing import Callable, Sequence, Tuple, TypeVar
+
+from biterator import Bits
 
 T = TypeVar("T")
 
@@ -14,8 +15,8 @@ class PegGroup:
     """A grouping of binary representations of pegs and marker positions."""
 
     name: str
-    pegs: Sequence[bool]
-    markers: Sequence[bool]
+    pegs: Bits
+    markers: Bits
 
 
 # @*@oo@*@*@ooo@*@*@*ooo@* | @*@*@*oooo@*@*oooo@*@*@* | @*@*@*@*oooooooooooooooo
@@ -50,76 +51,3 @@ def _swap_pegs(pegs: Pegs, a: str, b: str) -> Pegs:
     return tuple(
         tuple(s.replace(a, placeholder).replace(b, a).replace(placeholder, b) for s in panel) for panel in pegs
     )
-
-
-def matching_elements(sequence: Sequence[T], needle: T) -> Tuple[bool]:
-    """
-    Return a tuple with True values at each index where needle equals the element in sequence.
-
-    :param sequence: The sequence to check for matches.
-    :param needle: An object to check against the sequence.
-    :return: A tuple of boolean values corresponding if a match was found.
-
-    >>> matching_elements("PME", "M")
-    (False, True, False)
-    """
-    return tuple(item == needle for item in sequence)
-
-
-def invert_bools(bits: Iterable[bool]) -> Tuple[bool]:
-    """
-    Invert each element in bits and return as a tuple.
-
-    :param bits: The bits to be inverted.
-    :return: The inverted tuple.
-    """
-    return tuple(not bit for bit in bits)
-
-
-def bools_to_nor_mask(masking_bools: Collection[bool]) -> NorMask:
-    """
-    Return a sequence of binary functions.
-
-    Depending on masking_bools[i], each function returns either nor(a,b) if True, or left(a,b):=a otherwise.
-    E.g., bools_to_nor_mask((True, False)) returns (nor, left)
-
-    :param masking_bools: Bools that determine if the function should NOR or not.
-    :return: Elementwise operator.
-
-    >>> a = [False, True, False, True]
-    >>> b = [False, False, True, True]
-    >>> nor_mask_false = bools_to_nor_mask([False, False, False, False])
-    >>> nor_mask_false(a, b)
-    (False, True, False, True)
-    >>> nor_mask_true = bools_to_nor_mask([True, True, True, True])
-    >>> nor_mask_true(a, b)
-    (True, False, False, False)
-    """
-
-    def nor(a: bool, b: bool) -> bool:
-        return not (a or b)
-
-    def left(*args) -> bool:
-        return args[0]
-
-    def nor_mask_function(a: Collection[bool], b: Collection[bool]) -> Tuple[bool]:
-        assert len(a) == len(b) == len(masking_bools)
-
-        operators = (nor if bit else left for bit in masking_bools)
-        return tuple(operator(l, r) for operator, l, r in zip(operators, a, b))
-
-    return nor_mask_function
-
-
-def bools_to_int_be(bits: Collection) -> int:
-    """
-    Integer from a sequence of boolean values; assumes the sequence is stored in big endian order.
-
-    :param bits: The sequence of booleans.
-    :return: The integer.
-
-    >>> bools_to_int_be([False, True, False, True])
-    5
-
-    """
-    return reduce(lambda prev, current: prev << 1 | current, bits)
