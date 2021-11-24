@@ -1,4 +1,5 @@
 """A collection of stuff related to https://stalburg.net/Body_message#Pegs."""
+from itertools import chain
 from typing import Callable
 
 from biterator import Bits
@@ -32,7 +33,7 @@ def bits_2_glyphs(bits: Bits, post_op: ColorFunc = lambda x: x) -> str:
     >>> bits_2_glyphs(Bits([False, False, False, False, True, False, True, False]))
     '  0a'
     """
-    return " ".join(f"{ord(x):4x}" if not x.isalnum() else f"   {post_op(x)}" for x in bits.decode("iso8859_10"))
+    return " ".join(f"{x:2x}" if not chr(x).isalnum() else f" {post_op(chr(x))}" for x in bytes(bits))
 
 
 if __name__ == "__main__":
@@ -63,7 +64,7 @@ if __name__ == "__main__":
 
     # Some labeling to help identify interesting results.
     print()
-    print(" " * 28 + (" " * 11).join(f"col {x: <2d}" for x in range(1, 9)))
+    print(" " * 26 + (" " * 5).join(f"col {x: <2d}" for x in range(1, 9)))
 
     def nor_mask(a, b, mask):
         """
@@ -76,21 +77,42 @@ if __name__ == "__main__":
     # Iterate through all combinations of the peg groupings.
     # Bits are represented by peg locations.
     # A nor mask is made from the marker locations from one of the peg groupings.
-    for i, pegs1 in enumerate(peg_groups):
+    for i, gp1 in enumerate(peg_groups):
 
-        for j, pegs2 in enumerate(peg_groups):
-            print(f"{pegs1.name} x {pegs2.name}", end=" =  ")
+        for j, gp2 in enumerate(peg_groups):
+            print(f"{gp1.name} x {gp2.name}", end=" =  ")
 
-            print(bits_2_glyphs(nor_mask(pegs1.pegs, pegs2.pegs, pegs1.markers), red_text), end="   ")  # col 1
-            print(bits_2_glyphs(nor_mask(pegs1.pegs, pegs2.pegs, pegs2.markers), red_text), end="   ")  # col 2
+            print(bits_2_glyphs(nor_mask(gp1.pegs, gp2.pegs, gp1.markers), red_text), end="   ")  # col 1
+            print(bits_2_glyphs(nor_mask(gp1.pegs, gp2.pegs, gp2.markers), red_text), end="   ")  # col 2
 
-            print(bits_2_glyphs(nor_mask(pegs1.pegs, ~pegs2.pegs, pegs1.markers), red_text), end="   ")  # col 3
-            print(bits_2_glyphs(nor_mask(pegs1.pegs, ~pegs2.pegs, pegs2.markers), red_text), end="   ")  # col 4
+            print(bits_2_glyphs(nor_mask(gp1.pegs, ~gp2.pegs, gp1.markers), red_text), end="   ")  # col 3
+            print(bits_2_glyphs(nor_mask(gp1.pegs, ~gp2.pegs, gp2.markers), red_text), end="   ")  # col 4
 
-            print(bits_2_glyphs(nor_mask(~pegs1.pegs, pegs2.pegs, pegs1.markers), red_text), end="   ")  # col 5
-            print(bits_2_glyphs(nor_mask(~pegs1.pegs, pegs2.pegs, pegs2.markers), red_text), end="   ")  # col 6
+            print(bits_2_glyphs(nor_mask(~gp1.pegs, gp2.pegs, gp1.markers), red_text), end="   ")  # col 5
+            print(bits_2_glyphs(nor_mask(~gp1.pegs, gp2.pegs, gp2.markers), red_text), end="   ")  # col 6
 
-            print(bits_2_glyphs(nor_mask(~pegs1.pegs, ~pegs2.pegs, pegs1.markers), red_text), end="   ")  # col 7
-            print(bits_2_glyphs(nor_mask(~pegs1.pegs, ~pegs2.pegs, pegs2.markers), red_text), end="   ")  # col 8
+            print(bits_2_glyphs(nor_mask(~gp1.pegs, ~gp2.pegs, gp1.markers), red_text), end="   ")  # col 7
+            print(bits_2_glyphs(nor_mask(~gp1.pegs, ~gp2.pegs, gp2.markers), red_text), end="   ")  # col 8
             print()
         print()
+
+    top, bot = tuple(tuple(chain(*(group[i] for group in metro_control_panel_001_pegboard))) for i in range(2))
+
+    top_pegs = Bits(top, ones={"P"})
+    top_mkrs = Bits(top, ones={"M"})
+    bot_pegs = Bits(bot, ones={"P"})
+    bot_mkrs = Bits(bot, ones={"M"})
+
+    print(bits_2_glyphs(top_pegs ^ top_mkrs))
+    print(bits_2_glyphs(top_pegs ^ bot_mkrs))
+    print(bits_2_glyphs(bot_pegs ^ top_mkrs))
+    print(bits_2_glyphs(bot_pegs ^ bot_mkrs))
+    print(bits_2_glyphs(top_pegs ^ bot_pegs))
+    print(bits_2_glyphs(top_mkrs ^ bot_mkrs))
+    print()
+    print(bits_2_glyphs(top_pegs | top_mkrs))
+    print(bits_2_glyphs(top_pegs | bot_mkrs))
+    print(bits_2_glyphs(bot_pegs | top_mkrs))
+    print(bits_2_glyphs(bot_pegs | bot_mkrs))
+    print(bits_2_glyphs(top_pegs | bot_pegs))
+    print(bits_2_glyphs(top_mkrs | bot_mkrs))

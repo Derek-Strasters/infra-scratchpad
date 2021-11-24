@@ -7,7 +7,7 @@ authors = ["Your Name <you@example.com>"]
 [tool.poetry.dependencies]
 python = "^3.8"
 termcolor = "*"
-biterator = {git = "https://github.com/Derek-Strasters/biterator.git"}
+biterator = "*"
 
 [tool.poetry.dev-dependencies]
 black = "*"
