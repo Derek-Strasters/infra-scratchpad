@@ -161,6 +161,17 @@ python-versions = "*"
 flake8 = "*"
 
 [[package]]
+name = "hashcat"
+version = "21.12.5"
+description = "Python pip installer for hashcat"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.extras]
+dev = ["ipython", "twine", "pytest", "python-coveralls", "coverage (==4.5.4)", "pytest-cov", "pytest-xdist", "sphinxcontrib-napoleon", "sphinx-rtd-theme", "sphinx-autodoc-typehints"]
+
+[[package]]
 name = "iniconfig"
 version = "1.1.1"
 description = "iniconfig: brain-dead simple config-ini parsing"
@@ -375,7 +386,7 @@ python-versions = ">=3.6"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "1a80370686d0989bcea43376268cf954d821fd528052c177b728dc89f0449264"
+content-hash = "6178964be72f6f23962a5f6d1e76dde06c86db8cc948309e66b7907923d378ff"
 
 [metadata.files]
 atomicwrites = [
@@ -428,6 +439,10 @@ flake8-isort = [
 ]
 flake8-quotes = [
     {file = "flake8-quotes-3.3.1.tar.gz", hash = "sha256:633adca6fb8a08131536af0d750b44d6985b9aba46f498871e21588c3e6f525a"},
+]
+hashcat = [
+    {file = "hashcat-21.12.5-py3-none-manylinux1_x86_64.whl", hash = "sha256:375efcfe6cc1db3b143f59960125613796ae9e859f3557eeaf45be3855754c9e"},
+    {file = "hashcat-21.12.5-py3-none-win_amd64.whl", hash = "sha256:12624446dc66ff45d28b3d5715ff25b231ea053a2669d6f3097bc07151940f06"},
 ]
 iniconfig = [
     {file = "iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3"},

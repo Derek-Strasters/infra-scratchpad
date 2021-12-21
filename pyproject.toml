@@ -8,6 +8,7 @@ authors = ["Your Name <you@example.com>"]
 python = "^3.8"
 termcolor = "*"
 biterator = "*"
+hashcat = "^21.12.5"
 
 [tool.poetry.dev-dependencies]
 black = "*"
