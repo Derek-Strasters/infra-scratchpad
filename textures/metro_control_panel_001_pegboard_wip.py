@@ -29,9 +29,9 @@ def bits_2_glyphs(bits: Bits, post_op: ColorFunc = lambda x: x) -> str:
     :return: String containing the decoded bits.
 
     >>> bits_2_glyphs(Bits([False, True, True, False, False, True, False, True]))
-    '   e'
+    ' e'
     >>> bits_2_glyphs(Bits([False, False, False, False, True, False, True, False]))
-    '  0a'
+    ' a'
     """
     return " ".join(f"{x:2x}" if not chr(x).isalnum() else f" {post_op(chr(x))}" for x in bytes(bits))
 
